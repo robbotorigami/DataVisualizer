@@ -6,15 +6,25 @@ import math
 from math import radians
 from decimal import *
 import csv
+import os
+
+"""Global Data"""
+dataGlobal = {}
+textOptionsGlobal = {}
 
 """These are controls"""
 FramesPerSecond = 30
-defaultScale = ((5,5,5))
-defaultLocation = ((0,0,-2.5))
-
+defaultScale = ((4,4,4))
+defaultLocation = ((-1.5,0,0))
+invertPitch = True
 
 #Row definitions
 rowIndex = {'Time':0, 'Roll':1, 'Pitch':2, 'Yaw':3, 'Altitude':4}
+
+#Definition of text options
+textOpt = {'Altitude Meter': lambda data, f: "Alt: " + "{:.0f}".format(data['Altitude'][f]) + "m",
+           'Altitude Feet': lambda data, f: "Alt: " + "{:.0f}".format(data['Altitude'][f]/.3048) + "ft"
+           }
 
 """ function that reads all data from csv file"""
 #Usage:
@@ -23,19 +33,21 @@ rowIndex = {'Time':0, 'Roll':1, 'Pitch':2, 'Yaw':3, 'Altitude':4}
 #timeStep: minimum time step between each row of data
 def readIntoLists(importFile, dataToInclude, timeStep):
     data = {x: [] for x in dataToInclude}
-    oldTime = data['Time'][0]
+    oldTime = float(-2*timeStep)
     with open(importFile, 'r') as dataFile:
         iterator = csv.reader(dataFile, delimiter=',', quotechar='|')
+        next(iterator)
         for row in iterator:
-            if row[rowIndex['Time']] - oldTime > timeStep:
+            if float(row[rowIndex['Time']]) - oldTime > timeStep:
                 for dataType in dataToInclude:
                     data[dataType].append(float(row[rowIndex[dataType]]))
-                oldTime = row[rowIndex['Time']]
+                oldTime = float(row[rowIndex['Time']])
 
     return data
 
 
 """ Import model """
+#modelFile: name of the model to import
 def importModel(modelFile):
     bpy.ops.import_scene.obj(filepath = modelFile)
     o = bpy.data.objects['Object']
@@ -44,9 +56,12 @@ def importModel(modelFile):
     o.scale = defaultScale
     o.location = defaultLocation
     bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+    bpy.ops.object.transform_apply( rotation = True )
 
 """Creates a list of values that contain keyframe numbers for each time"""
 #Note it is entirely possible for these to overlap
+#Times: list of time values
+#timeStep: the minimum amount of time between keyframes
 def createKeyframeList(Times, timeStep):
     startingTime = Times[0]
     frameslist = []
@@ -54,6 +69,89 @@ def createKeyframeList(Times, timeStep):
         framenumber = (time-startingTime)*FramesPerSecond/1000
         frameslist.append(int(framenumber))
     return frameslist
+
+
+"""Fixes any problems with data"""
+#data: all of the data values
+#dataToConvert: Types of data to convert from degrees to radians
+def dataFix(data, dataToConvert):
+    for dataType in dataToConvert:
+        dataValues = data[dataType]
+        dataValuesNew = []
+        for value in dataValues:
+            dataValuesNew.append(math.radians(value))
+        data[dataType] = dataValuesNew
+    
+    if invertPitch:
+        dataValuesNew = []
+        for value in data['Pitch']:
+            dataValuesNew.append(-value)
+        data['Pitch'] = dataValuesNew
+        
+
+"""Key frame all of the RPY data in the visualizer model"""
+#data: data set that contains Roll Pitch Yaw values
+def keyFrameRollPitchYaw(data):
+    bpy.ops.object.select_all(action='DESELECT')    
+    ob = bpy.data.objects.get("RotationDisplay")
+    
+    for i in range(len(data['KeyFrame'])):
+        ob.rotation_euler = [data['Roll'][i], data['Pitch'][i], data['Yaw'][i]]
+        ob.keyframe_insert(data_path = "rotation_euler", frame = data['KeyFrame'][i])
+        
+    for curve in ob.animation_data.action.fcurves:
+        for kf in curve.keyframe_points:
+            kf.interpolation = 'BEZIER'
+    """ob.rotation_euler = [0,0,0]
+    ob.keyframe_insert(data_path = "rotation_euler", frame = 0)"""
+
+"""Sets the end of the scene based on keyframe values"""
+#data: data set that contains keyframes
+def setEndOfAnimation(data):
+    lastFrame = data['KeyFrame'][len(data['KeyFrame'])-1]
+    bpy.context.scene.frame_end = lastFrame
+
+
+"""Sets up the handler for the text"""
+#Defines the needed global values and adds the handler
+def setupText(data, config):
+    global dataGlobal
+    global textOptionsGlobal
+    
+    dataGlobal = data
+
+    if config.get('Text', 'Upper Right') != 'None':
+        textOptionsGlobal['URText'] = textOpt[config.get('Text', 'Upper Right')]
+    if config.get('Text', 'Upper Left') != 'None':
+        textOptionsGlobal['ULText'] = textOpt[config.get('Text', 'Upper Left')]
+    if config.get('Text', 'Lower Right') != 'None':
+        textOptionsGlobal['LRText'] = textOpt[config.get('Text', 'Lower Right')]
+    if config.get('Text', 'Lower Left') != 'None':
+        textOptionsGlobal['LLText'] = textOpt[config.get('Text', 'Lower Left')]
+    
+    bpy.app.handlers.frame_change_pre.append(doText)
+
+"""A handler for the text. Changes the text based on current frame"""
+#Requires following globals
+#dataGlobal: data for all text
+#textOptionsGlobal: what to display where
+def doText(scene):
+    global dataGlobal
+    global textOptionsGlobal
+    frame =  scene.frame_current
+    index = min(range(len(dataGlobal['KeyFrame'])), key=lambda i: abs(dataGlobal['KeyFrame'][i]-frame))
+
+    for i, func in textOptionsGlobal.items():
+        bpy.ops.object.select_all(action='DESELECT')    
+        ob = bpy.data.objects.get(i)
+        ob.data.body = func(dataGlobal, index)
+
+
+"""Handle rendering image or video"""
+def handleRender(Config, root):
+    bpy.data.scenes['Scene'].render.filepath = os.path.join(root, 'images', 'render.png')
+    bpy.ops.render.render( write_still=True )
+
 
 def keyFrameGPSMap(Frames):    
     global Lats
@@ -97,53 +195,4 @@ def keyFrameGPSMap(Frames):
     # Fill the mesh with verts, edges, faces 
     me.from_pydata(coords,edges,faces)   # edges or faces should be [], or you ask for problems
     me.update(calc_edges=True)    # Update mesh with new data  
-    
-        
-    
-def keyFrameRollPitchYaw(Frames):
-    global Rolls
-    global Pitches
-    global Yaws    
-    bpy.ops.object.select_all(action='DESELECT')    
-    ob = bpy.data.objects.get("BIGGLIDER")
-    
-    for i in range(len(Frames)):
-        ob.rotation_euler = [Pitches[i], Rolls[i], Yaws[i]]
-        ob.keyframe_insert(data_path = "rotation_euler", frame = Frames[i])
-    ob.rotation_euler = [0,0,0]
-    ob.keyframe_insert(data_path = "rotation_euler", frame = 0)
-
-def doText(scene):
-    global States
-    global Times
-    global Rolls
-    global Pitches
-    global Yaws
-    global FixTimes
-    global Lats
-    global Longs
-    global VelocityMag
-    global VelocityDir
-    global Sats
-    global Alts
-    global keyFrames
-    frame =  scene.frame_current
-    if keyFrames.count(frame) != 0:
-        i = keyFrames.index(frame)
-        bpy.ops.object.select_all(action='DESELECT')    
-        ob = bpy.data.objects.get("RPYText")
-        ob.data.body = "Roll:" + str(Rolls[i]) + " Pitch:" + str(Pitches[i]) + " Yaw:" + str(Yaws[i])
-        
-        bpy.ops.object.select_all(action='DESELECT')    
-        ob = bpy.data.objects.get("LATLONGText")
-        ob.data.body = "Lat:" + str(Lats[i]) + " Long:" + str(Longs[i])
-        
-        bpy.ops.object.select_all(action='DESELECT')    
-        ob = bpy.data.objects.get("StatusText")
-        ob.data.body = StatusMessages[States[i]]
-        
-        bpy.ops.object.select_all(action='DESELECT')    
-        ob = bpy.data.objects.get("ALTText")
-        ob.data.body = str(Alts[i]/100) + "m / " + str(round(Alts[i]/30.48,2)) +"ft"
-
 
