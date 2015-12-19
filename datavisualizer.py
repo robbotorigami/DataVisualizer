@@ -8,44 +8,46 @@ from decimal import *
 import csv
 
 """These are controls"""
-#File to read from
 FramesPerSecond = 30
-#These are the upper left and lower right lat longs of the gps map
-LowerRightGPSMAP = [38.160025,-104.801775]
-UpperLeftGPSMAP = [38.168844,-104.816625]
-CenterGPSMAP = [(LowerRightGPSMAP[0]+UpperLeftGPSMAP[0])/2,(LowerRightGPSMAP[1]+UpperLeftGPSMAP[1])/2]
-distancecrossmap = 1298
-scalemap = 0
+defaultScale = ((5,5,5))
+defaultLocation = ((0,0,-2.5))
+
 
 #Row definitions
-
+rowIndex = {'Time':0, 'Roll':1, 'Pitch':2, 'Yaw':3, 'Altitude':4}
 
 """ function that reads all data from csv file"""
 #Usage:
 #importFile: contains file path to the data file
-#dataToInclude: list of what data is in the files 
-def readIntoLists(importFile, dataToInclude):
-    Times = []
-    Rolls = []
-    Pitches = []
-    Yaws = []
-    Alts = []
-    
+#dataToInclude: list of what data is in the files
+#timeStep: minimum time step between each row of data
+def readIntoLists(importFile, dataToInclude, timeStep):
+    data = {x: [] for x in dataToInclude}
+    oldTime = data['Time'][0]
     with open(importFile, 'r') as dataFile:
         iterator = csv.reader(dataFile, delimiter=',', quotechar='|')
         for row in iterator:
-            if 'Time' in dataToInclude:
-                Times.append(float(row[0]))
-            if 'Euler' in dataToInclude:
-                Rolls.append(float(row[1]))
-                Pitches.append(float(row[2]))
-                Yaws.append(float(row[3]))
-            if 'Altitude' in dataToInclude:
-                Alts.append(float(row[4]))
+            if row[rowIndex['Time']] - oldTime > timeStep:
+                for dataType in dataToInclude:
+                    data[dataType].append(float(row[rowIndex[dataType]]))
+                oldTime = row[rowIndex['Time']]
 
-    if 'Time
+    return data
 
-def createKeyframeList():
+
+""" Import model """
+def importModel(modelFile):
+    bpy.ops.import_scene.obj(filepath = modelFile)
+    o = bpy.data.objects['Object']
+    bpy.context.scene.objects.active = o
+    bpy.context.scene.objects.active.name = 'RotationDisplay'
+    o.scale = defaultScale
+    o.location = defaultLocation
+    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+
+"""Creates a list of values that contain keyframe numbers for each time"""
+#Note it is entirely possible for these to overlap
+def createKeyframeList(Times, timeStep):
     startingTime = Times[0]
     frameslist = []
     for time in Times:
@@ -143,25 +145,5 @@ def doText(scene):
         bpy.ops.object.select_all(action='DESELECT')    
         ob = bpy.data.objects.get("ALTText")
         ob.data.body = str(Alts[i]/100) + "m / " + str(round(Alts[i]/30.48,2)) +"ft"
-        
-    
-    
-readIntoGlobalVars()
-keyFrames = createKeyframeList()
-keyFrameGPSMap(keyFrames)    
-keyFrameRollPitchYaw(keyFrames)
 
 
-def my_handler(scene):
-    frame = scene.frame_current
- 
-    if frame > len(char_list):
-        current_string = char_list[-1]
- 
-    current_string = char_list[frame]
-    bpy.data.objects['Text'].data.body = current_string
- 
-for i in bpy.app.handlers.frame_change_pre:
-    bpy.app.handlers.frame_change_pre.pop() 
-bpy.app.handlers.frame_change_pre.append(doText)      
-print(len(bpy.app.handlers.frame_change_pre))
