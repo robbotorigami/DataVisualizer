@@ -2,6 +2,7 @@ import os
 import tkinter
 from tkinter.messagebox import *
 from Definitions import *
+import configparser
 
 class simpleapp_tk(tkinter.Tk):
     def __init__(self, parent):
@@ -132,14 +133,18 @@ class simpleapp_tk(tkinter.Tk):
     def checktimeScale(self, event):
         if float(self.timeScale.get()) <= 0:
             showerror('Ok', "Time Scale must be greater than 0")
-            timeScale.set("1.00")
+            self.timeScale.set("1.00")
+            return False
+        return True
 
     def checkFPS(self, event):
         fps = int(self.frameRate.get())
         if fps < 1 or fps > 60:
             showerror('Ok', "Frame Rate must be between 1`and 60")
             fps = 30
+            return False
         self.frameRate.set(fps)
+        return True
         
     def checkResolution(self, event):
         resx = int(self.resolutionx.get())
@@ -148,8 +153,10 @@ class simpleapp_tk(tkinter.Tk):
             showerror('Ok', "Resolution must be between 170x100 and 2000x1200")
             resx = 854
             resy = 480
+            return False
         self.resolutionx.set(str(resx))
         self.resolutiony.set(str(resy))
+        return True
 
     def populateDataSelection(self):
         menu = self.fileList['menu']
@@ -184,8 +191,31 @@ class simpleapp_tk(tkinter.Tk):
         label.grid(column = c, row=r, sticky = s)
 
     def RunRender(self):
-        os.system("Blender\\blender.exe Original.blend --python runfile.py > blenderlog.txt")
-        os.system("timeout /t -1")
+        Config = configparser.ConfigParser()
+        Config.read(os.path.join(self.root,'Settings.ini'))
+
+        if self.checktimeScale(None):
+            if self.checkFPS(None):
+                if self.checkResolution(None):
+                    Config['Settings']['Model'] = self.model.get()
+                    Config['Settings']['Data'] = self.file.get()
+                    Config['Settings']['TimeStep'] = self.timeStep.get()
+                    Config['Settings']['FPS'] = self.frameRate.get()
+                    Config['Settings']['Speed Factor'] = self.timeScale.get()
+
+                    Config['Text']['Lower Right'] = self.LRData.get()
+                    Config['Text']['Lower Left'] = self.LLData.get()
+                    Config['Text']['Upper Right'] = self.URData.get()
+                    Config['Text']['Upper Left'] = self.ULData.get()
+
+                    Config['Render']['Type'] = self.renderType.get()
+                    Config['Render']['Resolution X'] = self.resolutionx.get()
+                    Config['Render']['Resolution Y'] = self.resolutiony.get()
+                    with open('Settings.ini', 'w') as configfile:
+                        Config.write(configfile)
+                    
+                    os.system("Blender\\blender.exe Original.blend --python runfile.py > blenderlog.txt")
+                    os.system("timeout /t -1")
 
 
 if __name__ == "__main__":
@@ -193,6 +223,4 @@ if __name__ == "__main__":
     app.title('Data Visualization')
     app.mainloop()
 
-"""
-os.system("Blender\\blender.exe Original.blend --python runfile.py > blenderlog.txt")
-os.system("timeout /t -1")"""
+
