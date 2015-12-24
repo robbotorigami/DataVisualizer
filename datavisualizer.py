@@ -4,7 +4,9 @@ import mathutils
 from mathutils import Vector
 import math
 from math import radians
+from math import degrees
 from decimal import *
+from Definitions import *
 import csv
 import os
 
@@ -16,15 +18,8 @@ textOptionsGlobal = {}
 FramesPerSecond = 30
 defaultScale = ((4,4,4))
 defaultLocation = ((-1.5,0,0))
-invertPitch = True
+invertPitch = False
 
-#Row definitions
-rowIndex = {'Time':0, 'Roll':1, 'Pitch':2, 'Yaw':3, 'Altitude':4}
-
-#Definition of text options
-textOpt = {'Altitude Meter': lambda data, f: "Alt: " + "{:.0f}".format(data['Altitude'][f]) + "m",
-           'Altitude Feet': lambda data, f: "Alt: " + "{:.0f}".format(data['Altitude'][f]/.3048) + "ft"
-           }
 
 """ function that reads all data from csv file"""
 #Usage:
@@ -62,11 +57,11 @@ def importModel(modelFile):
 #Note it is entirely possible for these to overlap
 #Times: list of time values
 #timeStep: the minimum amount of time between keyframes
-def createKeyframeList(Times, timeStep):
+def createKeyframeList(Times, timeStep, timeScale):
     startingTime = Times[0]
     frameslist = []
     for time in Times:
-        framenumber = (time-startingTime)*FramesPerSecond/1000
+        framenumber = FramesPerSecond/timeScale *(time-startingTime)/1000
         frameslist.append(int(framenumber))
     return frameslist
 
@@ -102,8 +97,6 @@ def keyFrameRollPitchYaw(data):
     for curve in ob.animation_data.action.fcurves:
         for kf in curve.keyframe_points:
             kf.interpolation = 'BEZIER'
-    """ob.rotation_euler = [0,0,0]
-    ob.keyframe_insert(data_path = "rotation_euler", frame = 0)"""
 
 """Sets the end of the scene based on keyframe values"""
 #data: data set that contains keyframes
@@ -149,10 +142,19 @@ def doText(scene):
 
 """Handle rendering image or video"""
 def handleRender(Config, root):
-    bpy.data.scenes['Scene'].render.filepath = os.path.join(root, 'images', 'render.png')
-    bpy.ops.render.render( write_still=True )
+    bpy.data.scenes['Scene'].render.resolution_x = int(Config.get('Render', 'Resolution X'))
+    bpy.data.scenes['Scene'].render.resolution_y = int(Config.get('Render', 'Resolution Y'))
+    bpy.data.scenes['Scene'].render.fps = FramesPerSecond
+    if Config.get('Render', 'Type') == 'Image':
+        bpy.data.scenes['Scene'].render.filepath = os.path.join(root, 'images', 'render.png')
+        bpy.ops.render.render( write_still=True )
+    elif Config.get('Render', 'Type') == 'Video':
+        bpy.data.scenes['Scene'].render.filepath = os.path.join(root, 'videos', 'render.avi')
+        bpy.data.scenes['Scene'].render.image_settings.file_format = 'AVI_JPEG'
+        bpy.ops.render.opengl( animation = True, write_still = True)
 
-
+def exitBlender():
+    bpy.ops.wm.quit_blender()
 def keyFrameGPSMap(Frames):    
     global Lats
     global Longs

@@ -1,9 +1,6 @@
 import sys
 import os
 root = os.path.dirname(__file__)
-print('------------------------OUTPUT------------------')
-print(root)
-print('------------------------------------------------')
 sys.path.append(root)
 
 import datavisualizer as dv
@@ -30,7 +27,9 @@ data = dv.readIntoLists(dataFile, dataToRead, timeStep)
 dv.dataFix(data, ['Roll','Pitch','Yaw'])
 
 #Create the list of keyframes for all the timestamps
-framesList = dv.createKeyframeList(data['Time'], timeStep)
+dv.FramesPerSecond = int(Config.get('Settings', 'FPS'))
+timeScale = float(Config.get('Settings', 'Speed Factor'))
+framesList = dv.createKeyframeList(data['Time'], timeStep, timeScale)
 
 #Keyframe the rotation data on the model
 data['KeyFrame'] = framesList
@@ -44,3 +43,6 @@ dv.setupText(data, Config)
 
 #Render the desired output
 dv.handleRender(Config, root)
+
+#Exit
+dv.exitBlender()
