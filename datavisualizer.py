@@ -7,8 +7,12 @@ from math import radians
 from math import degrees
 from decimal import *
 from Definitions import *
+from timeit import default_timer as timer
 import csv
-import os
+import os, sys
+
+
+
 
 """Global Data"""
 dataGlobal = {}
@@ -149,9 +153,47 @@ def handleRender(Config, root):
         bpy.data.scenes['Scene'].render.filepath = os.path.join(root, 'images', 'render.png')
         bpy.ops.render.render( write_still=True )
     elif Config.get('Render', 'Type') == 'Video':
-        bpy.data.scenes['Scene'].render.filepath = os.path.join(root, 'videos', 'render.avi')
+        frameEnd = bpy.context.scene.frame_end
+        file = open(os.path.join(root,'status.txt'), 'w')
+        file.seek(0)
+        file.truncate()
+        file.close()
+        
+        setStatus("Starting...\n", root)
+        for i in range(frameEnd):
+            start = timer()
+            bpy.data.scenes['Scene'].render.filepath = os.path.join(root, 'temp', 'render{:6.0f}'.format(i))
+            bpy.data.scenes['Scene'].render.image_settings.file_format = 'PNG'
+            bpy.context.scene.frame_set(i)
+            bpy.ops.render.render(write_still = True)
+            end = timer()
+            timeleft = (end-start)*(frameEnd-i)
+            m, s = divmod(timeleft, 60)
+            h, m = divmod(m, 60)
+            setStatus("Rendering Frame {:0.0f}/{:0.0f} {:2.2f}% done {:0.0f}h{:0.0f}m{:0.2f}s left\n".format(i, frameEnd, 100*i/frameEnd, h,m,s), root)
+        setStatus("Finishing...\n", root)
+        files = os.listdir(os.path.join(root, 'temp'))
+        files.sort()
+        scene = bpy.context.scene
+        scene.sequence_editor_create()
+
+        seq = scene.sequence_editor.sequences.new_image(
+                name="MyStrip",
+                filepath=os.path.join(root,'temp', files[0]),
+                channel=1, frame_start=1)
+        for f in files[1:frameEnd]:
+            seq.elements.append(f)
+        bpy.data.scenes['Scene'].render.filepath = os.path.join(root,'videos', 'render.avi')
         bpy.data.scenes['Scene'].render.image_settings.file_format = 'AVI_JPEG'
-        bpy.ops.render.opengl( animation = True, write_still = True)
+        bpy.ops.render.render(write_still = True, animation = True)
+        for file in files:
+            os.remove(os.path.join(root, 'temp',file))
+        setStatus("Done\n", root)
+
+def setStatus(text, root):
+    status = open(os.path.join(root,'status.txt'), 'w')
+    status.write(text)
+    status.close()
 
 def exitBlender():
     bpy.ops.wm.quit_blender()

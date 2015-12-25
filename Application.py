@@ -128,8 +128,23 @@ class simpleapp_tk(tkinter.Tk):
         
         finishButton = tkinter.Button(renderFrame, text = "Run Render", command = self.RunRender)
         finishButton.grid(column = 0, row = 0)
+
+        self.statusText = tkinter.StringVar()
+        self.statusText.set("")
+        statusLabel = tkinter.Label(renderFrame, textvariable = self.statusText)
+        statusLabel.grid(column = 0, row = 1)
+
+        self.after(250, self.checkStatus)
         
-        
+    def checkStatus(self):
+        try:
+            with open(os.path.join(self.root,'status.txt'), mode = 'r') as status:
+                self.statusText.set(status.readlines()[0].replace('\n', ""))
+
+        except:
+            None
+        self.after(250, self.checkStatus)
+
     def checktimeScale(self, event):
         if float(self.timeScale.get()) <= 0:
             showerror('Ok', "Time Scale must be greater than 0")
@@ -214,8 +229,8 @@ class simpleapp_tk(tkinter.Tk):
                     with open('Settings.ini', 'w') as configfile:
                         Config.write(configfile)
                     
-                    os.system("Blender\\blender.exe Original.blend --python runfile.py > blenderlog.txt")
-                    os.system("timeout /t -1")
+                    os.system("START /B Blender\\blender.exe Original.blend --background --python runfile.py >BlenderLog.txt")
+                    
 
 
 if __name__ == "__main__":
