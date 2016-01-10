@@ -100,7 +100,7 @@ def keyFrameRollPitchYaw(data):
         
     for curve in ob.animation_data.action.fcurves:
         for kf in curve.keyframe_points:
-            kf.interpolation = 'BEZIER'
+            kf.interpolation = 'CONSTANT'
 
 """Sets the end of the scene based on keyframe values"""
 #data: data set that contains keyframes
